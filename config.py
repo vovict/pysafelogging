@@ -26,8 +26,8 @@ To use, simply 'import logging' and log away!
 
 import errno
 import io
-import safelogging
-import safelogging.handlers
+import pysafelogging
+import pysafelogging.handlers
 import re
 import struct
 import sys
@@ -76,15 +76,15 @@ def fileConfig(fname, defaults=None, disable_existing_loggers=True):
     formatters = _create_formatters(cp)
 
     # critical section
-    safelogging._acquireLock()
+    pysafelogging._acquireLock()
     try:
-        safelogging._handlers.clear()
-        del safelogging._handlerList[:]
+        pysafelogging._handlers.clear()
+        del pysafelogging._handlerList[:]
         # Handlers add themselves to logging._handlers
         handlers = _install_handlers(cp, formatters)
         _install_loggers(cp, handlers, disable_existing_loggers)
     finally:
-        safelogging._releaseLock()
+        pysafelogging._releaseLock()
 
 
 def _resolve(name):
@@ -117,7 +117,7 @@ def _create_formatters(cp):
         fs = cp.get(sectname, "format", raw=True, fallback=None)
         dfs = cp.get(sectname, "datefmt", raw=True, fallback=None)
         stl = cp.get(sectname, "style", raw=True, fallback='%')
-        c = safelogging.Formatter
+        c = pysafelogging.Formatter
         class_name = cp[sectname].get("class")
         if class_name:
             c = _resolve(class_name)
@@ -140,18 +140,18 @@ def _install_handlers(cp, formatters):
         klass = section["class"]
         fmt = section.get("formatter", "")
         try:
-            klass = eval(klass, vars(safelogging))
+            klass = eval(klass, vars(pysafelogging))
         except (AttributeError, NameError):
             klass = _resolve(klass)
         args = section["args"]
-        args = eval(args, vars(safelogging))
+        args = eval(args, vars(pysafelogging))
         h = klass(*args)
         if "level" in section:
             level = section["level"]
             h.setLevel(level)
         if len(fmt):
             h.setFormatter(formatters[fmt])
-        if issubclass(klass, safelogging.handlers.MemoryHandler):
+        if issubclass(klass, pysafelogging.handlers.MemoryHandler):
             target = section.get("target", "")
             if len(target): #the target handler may not be loaded yet, so keep for later...
                 fixups.append((h, target))
@@ -172,11 +172,11 @@ def _handle_existing_loggers(existing, child_loggers, disable_existing):
     what was intended by the user. Also, allow existing loggers to NOT be
     disabled if disable_existing is false.
     """
-    root = safelogging.root
+    root = pysafelogging.root
     for log in existing:
         logger = root.manager.loggerDict[log]
         if log in child_loggers:
-            logger.level = safelogging.NOTSET
+            logger.level = pysafelogging.NOTSET
             logger.handlers = []
             logger.propagate = True
         else:
@@ -191,7 +191,7 @@ def _install_loggers(cp, handlers, disable_existing):
     llist = list(map(lambda x: x.strip(), llist))
     llist.remove("root")
     section = cp["logger_root"]
-    root = safelogging.root
+    root = pysafelogging.root
     log = root
     if "level" in section:
         level = section["level"]
@@ -228,7 +228,7 @@ def _install_loggers(cp, handlers, disable_existing):
         section = cp["logger_%s" % log]
         qn = section["qualname"]
         propagate = section.getint("propagate", fallback=1)
-        logger = safelogging.getLogger(qn)
+        logger = pysafelogging.getLogger(qn)
         if qn in existing:
             i = existing.index(qn) + 1 # start with the entry after qn
             prefixed = qn + "."
@@ -492,21 +492,21 @@ class DictConfigurator(BaseConfigurator):
             raise ValueError("Unsupported version: %s" % config['version'])
         incremental = config.pop('incremental', False)
         EMPTY_DICT = {}
-        safelogging._acquireLock()
+        pysafelogging._acquireLock()
         try:
             if incremental:
                 handlers = config.get('handlers', EMPTY_DICT)
                 for name in handlers:
-                    if name not in safelogging._handlers:
+                    if name not in pysafelogging._handlers:
                         raise ValueError('No handler found with '
                                          'name %r'  % name)
                     else:
                         try:
-                            handler = safelogging._handlers[name]
+                            handler = pysafelogging._handlers[name]
                             handler_config = handlers[name]
                             level = handler_config.get('level', None)
                             if level:
-                                handler.setLevel(safelogging._checkLevel(level))
+                                handler.setLevel(pysafelogging._checkLevel(level))
                         except Exception as e:
                             raise ValueError('Unable to configure handler '
                                              '%r: %s' % (name, e))
@@ -527,8 +527,8 @@ class DictConfigurator(BaseConfigurator):
             else:
                 disable_existing = config.pop('disable_existing_loggers', True)
 
-                safelogging._handlers.clear()
-                del safelogging._handlerList[:]
+                pysafelogging._handlers.clear()
+                del pysafelogging._handlerList[:]
 
                 # Do formatters first - they don't refer to anything else
                 formatters = config.get('formatters', EMPTY_DICT)
@@ -585,7 +585,7 @@ class DictConfigurator(BaseConfigurator):
                 #what's left in existing is the set of loggers
                 #which were in the previous configuration but
                 #which are not in the new configuration.
-                root = safelogging.root
+                root = pysafelogging.root
                 existing = list(root.manager.loggerDict.keys())
                 #The list needs to be sorted so that we can
                 #avoid disabling child loggers of explicitly
@@ -639,7 +639,7 @@ class DictConfigurator(BaseConfigurator):
                         raise ValueError('Unable to configure root '
                                          'logger: %s' % e)
         finally:
-            safelogging._releaseLock()
+            pysafelogging._releaseLock()
 
     def configure_formatter(self, config):
         """Configure a formatter from a dictionary."""
@@ -663,7 +663,7 @@ class DictConfigurator(BaseConfigurator):
             style = config.get('style', '%')
             cname = config.get('class', None)
             if not cname:
-                c = safelogging.Formatter
+                c = pysafelogging.Formatter
             else:
                 c = _resolve(cname)
             result = c(fmt, dfmt, style)
@@ -675,7 +675,7 @@ class DictConfigurator(BaseConfigurator):
             result = self.configure_custom(config)
         else:
             name = config.get('name', '')
-            result = safelogging.Filter(name)
+            result = pysafelogging.Filter(name)
         return result
 
     def add_filters(self, filterer, filters):
@@ -707,21 +707,21 @@ class DictConfigurator(BaseConfigurator):
             cname = config.pop('class')
             klass = self.resolve(cname)
             #Special case for handler which refers to another handler
-            if issubclass(klass, safelogging.handlers.MemoryHandler) and\
+            if issubclass(klass, pysafelogging.handlers.MemoryHandler) and\
                 'target' in config:
                 try:
                     th = self.config['handlers'][config['target']]
-                    if not isinstance(th, safelogging.Handler):
+                    if not isinstance(th, pysafelogging.Handler):
                         config.update(config_copy)  # restore for deferred cfg
                         raise TypeError('target not configured yet')
                     config['target'] = th
                 except Exception as e:
                     raise ValueError('Unable to set target handler '
                                      '%r: %s' % (config['target'], e))
-            elif issubclass(klass, safelogging.handlers.SMTPHandler) and\
+            elif issubclass(klass, pysafelogging.handlers.SMTPHandler) and\
                 'mailhost' in config:
                 config['mailhost'] = self.as_tuple(config['mailhost'])
-            elif issubclass(klass, safelogging.handlers.SysLogHandler) and\
+            elif issubclass(klass, pysafelogging.handlers.SysLogHandler) and\
                 'address' in config:
                 config['address'] = self.as_tuple(config['address'])
             factory = klass
@@ -741,7 +741,7 @@ class DictConfigurator(BaseConfigurator):
         if formatter:
             result.setFormatter(formatter)
         if level is not None:
-            result.setLevel(safelogging._checkLevel(level))
+            result.setLevel(pysafelogging._checkLevel(level))
         if filters:
             self.add_filters(result, filters)
         if props:
@@ -763,7 +763,7 @@ class DictConfigurator(BaseConfigurator):
         """
         level = config.get('level', None)
         if level is not None:
-            logger.setLevel(safelogging._checkLevel(level))
+            logger.setLevel(pysafelogging._checkLevel(level))
         if not incremental:
             #Remove any existing handlers
             for h in logger.handlers[:]:
@@ -777,7 +777,7 @@ class DictConfigurator(BaseConfigurator):
 
     def configure_logger(self, name, config, incremental=False):
         """Configure a non-root logger from a dictionary."""
-        logger = safelogging.getLogger(name)
+        logger = pysafelogging.getLogger(name)
         self.common_logger_config(logger, config, incremental)
         propagate = config.get('propagate', None)
         if propagate is not None:
@@ -785,7 +785,7 @@ class DictConfigurator(BaseConfigurator):
 
     def configure_root(self, config, incremental=False):
         """Configure a root logger from a dictionary."""
-        root = safelogging.getLogger()
+        root = pysafelogging.getLogger()
         self.common_logger_config(root, config, incremental)
 
 dictConfigClass = DictConfigurator
@@ -873,9 +873,9 @@ def listen(port=DEFAULT_LOGGING_CONFIG_PORT, verify=None):
         def __init__(self, host='localhost', port=DEFAULT_LOGGING_CONFIG_PORT,
                      handler=None, ready=None, verify=None):
             ThreadingTCPServer.__init__(self, (host, port), handler)
-            safelogging._acquireLock()
+            pysafelogging._acquireLock()
             self.abort = 0
-            safelogging._releaseLock()
+            pysafelogging._releaseLock()
             self.timeout = 1
             self.ready = ready
             self.verify = verify
@@ -889,9 +889,9 @@ def listen(port=DEFAULT_LOGGING_CONFIG_PORT, verify=None):
                                            self.timeout)
                 if rd:
                     self.handle_request()
-                safelogging._acquireLock()
+                pysafelogging._acquireLock()
                 abort = self.abort
-                safelogging._releaseLock()
+                pysafelogging._releaseLock()
             self.socket.close()
 
     class Server(threading.Thread):
@@ -912,9 +912,9 @@ def listen(port=DEFAULT_LOGGING_CONFIG_PORT, verify=None):
                 self.port = server.server_address[1]
             self.ready.set()
             global _listener
-            safelogging._acquireLock()
+            pysafelogging._acquireLock()
             _listener = server
-            safelogging._releaseLock()
+            pysafelogging._releaseLock()
             server.serve_until_stopped()
 
     return Server(ConfigSocketReceiver, ConfigStreamHandler, port, verify)
@@ -924,10 +924,10 @@ def stopListening():
     Stop the listening server which was created with a call to listen().
     """
     global _listener
-    safelogging._acquireLock()
+    pysafelogging._acquireLock()
     try:
         if _listener:
             _listener.abort = 1
             _listener = None
     finally:
-        safelogging._releaseLock()
+        pysafelogging._releaseLock()
